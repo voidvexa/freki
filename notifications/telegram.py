@@ -24,7 +24,6 @@ def send_message(text: str) -> None:
 
 
 def send_signal(symbol: str, direction: str, price: float, bar_time: str, stop: float, target: float, confidence: int, reasoning: str) -> None:
-    """Send a single actionable signal (LONG or SHORT only)."""
     direction_upper = direction.upper()
     message = (
         f"*{direction_upper}* {symbol}\n\n"
@@ -32,6 +31,11 @@ def send_signal(symbol: str, direction: str, price: float, bar_time: str, stop: 
         f"*Stop Loss:* ${stop:.2f}\n"
         f"*Take Profit:* ${target:.2f}\n"
         f"*Confidence:* {confidence}%\n\n"
-        f"*Reasoning:*\n{reasoning}"
+        f"*Reasoning:*\n{reasoning}\n\n"
+        f"_Price may have moved — verify before entering._"
     )
     send_message(message)
+
+
+def send_eod_close_reminder() -> None:
+    send_message("Close all open positions — market closing soon.")

@@ -9,3 +9,5 @@ build/
 .venv/
 venv/
 logs/
+.claude/
+docs/

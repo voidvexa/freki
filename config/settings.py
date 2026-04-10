@@ -9,23 +9,18 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Alpaca (data only)
     alpaca_api_key: str
     alpaca_secret_key: str
 
-    # Anthropic
     anthropic_api_key: str
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_temperature: float = 0.2
 
-    # Telegram
     telegram_bot_token: str
     telegram_chat_id: str
 
-    # ETFs
-    etf_symbols: str = "QQQ,SPY,IWM,SLV,GLD,USO,ETHA,BITO"
+    etf_symbols: str = "USO,BITO,SPY,QQQ,IWM,GLD"
 
-    # Scheduler
     timezone: str = "America/New_York"
     log_level: str = "INFO"
 

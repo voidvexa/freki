@@ -1,5 +1,4 @@
 def format_snapshot_summary(snapshot: dict) -> str:
-    """Format a snapshot into a readable text block for Claude reasoning."""
     lines = []
     price = snapshot.get("current_price")
     if price:
@@ -10,17 +9,31 @@ def format_snapshot_summary(snapshot: dict) -> str:
         if not tf:
             continue
         label = tf_key.upper()
-        macd_dir = "bullish" if tf.get("macd_bullish") else "bearish"
-        hist = "expanding" if tf.get("macd_hist_expanding") else "contracting"
-        ema = "above" if tf.get("price_above_ema21") else "below"
-        rsi = tf.get("rsi", "N/A")
-        atr = tf.get("atr", "N/A")
-        obv = "rising" if tf.get("obv_rising") else "falling"
-        vol_ratio = tf.get("volume_ratio", "N/A")
+
+        macd_bullish = tf.get("macd_bullish")
+        macd_dir = "bullish" if macd_bullish is True else ("bearish" if macd_bullish is False else "N/A")
+
+        macd_expanding = tf.get("macd_hist_expanding")
+        hist = "expanding" if macd_expanding is True else ("contracting" if macd_expanding is False else "N/A")
+
+        above_ema = tf.get("price_above_ema21")
+        ema = "above" if above_ema is True else ("below" if above_ema is False else "N/A")
+
+        rsi = tf.get("rsi")
+        rsi_str = f"{rsi}" if rsi is not None else "N/A"
+
+        atr = tf.get("atr")
+        atr_str = f"${atr}" if atr is not None else "N/A"
+
+        obv_rising = tf.get("obv_rising")
+        obv = "rising" if obv_rising is True else ("falling" if obv_rising is False else "N/A")
+
+        vol_ratio = tf.get("volume_ratio")
+        vol_str = f"{vol_ratio}x" if vol_ratio is not None else "N/A"
 
         lines.append(
             f"{label}: MACD {macd_dir} ({hist}) | {ema} EMA21 | "
-            f"RSI {rsi} | ATR ${atr} | Vol {vol_ratio}x | OBV {obv}"
+            f"RSI {rsi_str} | ATR {atr_str} | Vol {vol_str} | OBV {obv}"
         )
 
     return "\n".join(lines)
