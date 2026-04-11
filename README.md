@@ -8,30 +8,13 @@ ETF signal scanner that runs on a schedule during US market hours. It fetches pr
 
 | Parameter | Value |
 |---|---|
-| Entry timeframe | 30-minute candles (100 bars) |
-| Trend bias | 4-hour candles (100 bars) |
-| Stop loss | ATR(30m) x 1.0 |
-| Take profit | Stop distance x 1.5 (R:R = 1:1.5) |
-| Min confidence | 65% |
-| Scans per day | 11 (every 30 min, 10:32 - 15:32 ET) |
+| Entry timeframe | 4-hour candles (60 bars) |
+| Trend bias | Daily candles (100 bars) |
+| Stop loss | ATR(4h) x 1.5 |
+| Take profit | Stop distance x 2.5 (R:R = 1:2.5) |
+| Min confidence | 60% |
+| Scan | Daily at 12:20 ET |
 | EOD alert | 15:50 ET |
-
-### Scan Schedule (Eastern Time)
-
-| # | Time | Last Complete 30m Candle |
-|---|---|---|
-| 1 | 10:32 | 10:00 - 10:30 |
-| 2 | 11:02 | 10:30 - 11:00 |
-| 3 | 11:32 | 11:00 - 11:30 |
-| 4 | 12:02 | 11:30 - 12:00 |
-| 5 | 12:32 | 12:00 - 12:30 |
-| 6 | 13:02 | 12:30 - 13:00 |
-| 7 | 13:32 | 13:00 - 13:30 |
-| 8 | 14:02 | 13:30 - 14:00 |
-| 9 | 14:32 | 14:00 - 14:30 |
-| 10 | 15:02 | 14:30 - 15:00 |
-| 11 | 15:32 | 15:00 - 15:30 |
-| -- | 15:50 | *EOD close reminder* |
 
 ## Pipeline
 
@@ -41,8 +24,8 @@ Each scan follows this sequence for every symbol in the watchlist:
 
 The app calls the Alpaca API and requests two sets of candles:
 
-- **100 bars of 30m candles** -- the last ~2 trading days of price action
-- **100 bars of 4h candles** -- the last ~2-3 weeks for trend context
+- **60 bars of 4h candles** -- roughly the last week of price action for entry timing
+- **100 bars of daily candles** -- the last ~5 months for trend context
 
 ### 2. Compute Indicators
 
@@ -67,13 +50,13 @@ The indicators are formatted into a readable text block:
 
 ```
 Price: $550.00
-30M: MACD bullish (expanding) | above EMA21 | RSI 58.2 | ATR $1.05 | Vol 1.4x | OBV rising
-4H:  MACD bullish (expanding) | above EMA21 | RSI 62.1 | ATR $5.75 | Vol 0.9x | OBV rising
+4H: MACD bullish (expanding) | above EMA21 | RSI 58.2 | ATR $1.05 | Vol 1.4x | OBV rising
+1D: MACD bullish (expanding) | above EMA21 | RSI 62.1 | ATR $5.75 | Vol 0.9x | OBV rising
 ```
 
 ### 4. Claude Evaluation
 
-The summary is sent to Claude with a system prompt instructing it to act as a conservative signal analyst. Claude reads the indicators, reasons through them, and responds with:
+The summary is sent to Claude with a system prompt instructing it to act as a conservative swing signal analyst. Claude reads the indicators, reasons through them, and responds with:
 
 ```json
 {
@@ -85,7 +68,7 @@ The summary is sent to Claude with a system prompt instructing it to act as a co
 
 ### 5. Confidence Filter
 
-If `confidence >= 65%`, the signal proceeds. Otherwise it's logged as neutral and skipped.
+If `confidence >= 60%`, the signal proceeds. Otherwise it's logged as neutral and skipped.
 
 ### 6. Calculate Stop Loss and Take Profit
 
@@ -94,10 +77,10 @@ Using the entry timeframe ATR (e.g. $1.05):
 |  | Long | Short |
 |---|---|---|
 | Entry | $550.00 | $550.00 |
-| Stop Loss | $550.00 - $1.05 = **$548.95** | $550.00 + $1.05 = **$551.05** |
-| Take Profit | $550.00 + $1.58 = **$551.58** | $550.00 - $1.58 = **$548.42** |
+| Stop Loss | $550.00 - $1.58 = **$548.42** | $550.00 + $1.58 = **$551.58** |
+| Take Profit | $550.00 + $3.94 = **$553.94** | $550.00 - $3.94 = **$546.06** |
 
-Risk-to-reward is always **1:1.5**.
+Stop distance = ATR x 1.5 = $1.05 x 1.5 = $1.58. Take profit = stop distance x 2.5 = $3.94. Risk-to-reward is always **1:2.5**.
 
 ### 7. Telegram Notification
 
@@ -105,12 +88,12 @@ Risk-to-reward is always **1:1.5**.
 LONG SPY
 
 Entry: $550.00 (as of 2026-04-09 12:00 ET)
-Stop Loss: $548.95
-Take Profit: $551.58
+Stop Loss: $548.42
+Take Profit: $553.94
 Confidence: 72%
 
 Reasoning:
-Both timeframes aligned bullish. 30m MACD expanding with price
+Both timeframes aligned bullish. 4h MACD expanding with price
 above EMA21. Volume confirms the move with OBV rising and 1.4x
 average volume.
 ```
@@ -155,25 +138,31 @@ The scheduler will start and run scans at the configured times. Press `Ctrl+C` t
 ```
 freki/
   main.py                    # Scheduler entry point
+  SETUP.md                   # Additional setup notes
   config/
     settings.py              # Environment config (pydantic-settings)
     symbols.py               # ETF watchlist
-    trading_params.py         # ATR multiplier, R:R, confidence threshold
+    trading_params.py        # ATR multiplier, R:R, confidence threshold
   data/
-    alpaca_client.py          # Alpaca API client
-    market_data.py            # OHLCV data fetching
+    alpaca_client.py         # Alpaca API client
+    market_data.py           # OHLCV data fetching
   indicators/
-    composite.py              # Technical indicator computation
+    composite.py             # Technical indicator computation
   signals/
-    formatter.py              # Indicator summary formatting
+    formatter.py             # Indicator summary formatting
   agent/
-    claude_client.py          # Claude API integration + prompt
+    claude_client.py         # Claude API integration + prompt
   scheduler/
-    signal_runner.py          # Main scan loop
+    signal_runner.py         # Main scan loop
   notifications/
-    telegram.py               # Telegram delivery
+    telegram.py              # Telegram delivery
   monitoring/
-    logger.py                 # Loguru configuration
+    logger.py                # Loguru configuration
+  docs/
+    how-freki-works.html     # Visual documentation
+  tests/
+    unit/
+    integration/
 ```
 
 ## License
