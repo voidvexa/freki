@@ -4,13 +4,14 @@ Step-by-step instructions to get Freki running after forking the repository.
 
 ## Prerequisites
 
-You need accounts on three services. All have free tiers that are sufficient.
+You need accounts on three services (plus FRED, which is optional). All have free tiers that are sufficient.
 
 | Service | What Freki uses it for | Sign up |
 |---|---|---|
 | Alpaca | Market data (OHLCV candles) | https://alpaca.markets/ |
 | Anthropic | Signal analysis via Claude | https://console.anthropic.com/ |
 | Telegram | Trade signal delivery | https://telegram.org/ |
+| FRED | Macro context for Claude (optional) | https://fred.stlouisfed.org/docs/api/api_key.html |
 
 You also need **Python 3.11+** installed.
 
@@ -60,6 +61,14 @@ pip install -r requirements.txt
 3. Start a chat with your new bot (send it any message).
 4. Get your **chat ID** by visiting `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates` in a browser. Look for `"chat":{"id": 123456789}` in the JSON response.
 
+### FRED (optional)
+
+1. Register at [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/api_key.html).
+2. Generate a free API key.
+3. Copy the key and add it to `.env` as `FRED_API_KEY`.
+
+If omitted, Freki runs without macro context — Claude evaluates on technicals only.
+
 ## 3. Configure environment
 
 ```bash
@@ -92,7 +101,7 @@ Logs go to `logs/freki_YYYY-MM-DD.log` (auto-rotated daily, kept for 30 days).
 
 After the first scheduled scan fires, you should see:
 - Console output showing each symbol being scanned.
-- A Telegram message if any signal meets the confidence threshold.
+- A Telegram message if a long or short signal is generated.
 - A log file under `logs/`.
 
 If nothing happens at the scheduled time, check that:
@@ -111,6 +120,7 @@ If nothing happens at the scheduled time, check that:
 | `ANTHROPIC_API_KEY` | yes | -- | Anthropic API key |
 | `ANTHROPIC_MODEL` | no | `claude-sonnet-4-6` | Claude model to use for analysis |
 | `ANTHROPIC_TEMPERATURE` | no | `0.2` | Model temperature (0.0 - 1.0) |
+| `FRED_API_KEY` | no | -- | FRED API key for macro context. Leave blank to disable. |
 | `TELEGRAM_BOT_TOKEN` | yes | -- | Telegram bot token from BotFather |
 | `TELEGRAM_CHAT_ID` | yes | -- | Your Telegram chat ID |
 | `ETF_SYMBOLS` | no | `USO,BITO,SPY,QQQ,IWM,GLD` | Comma-separated list of symbols to scan |
@@ -127,7 +137,8 @@ These are constants in code, not environment variables. Edit the file directly t
 | `TREND_LOOKBACK` | `100` | Number of bars to fetch for the trend timeframe |
 | `ATR_STOP_MULT` | `1.5` | Stop loss distance = ATR x this multiplier |
 | `MIN_RISK_REWARD` | `2.5` | Take profit distance = stop distance x this multiplier |
-| `MIN_CONFIDENCE` | `60` | Minimum Claude confidence % to trigger a signal |
+
+**Per-symbol overrides** (`config/per_symbol_params.py`): Optional symbol-specific overrides for RSI zones and ATR multiplier. Values here take precedence over `trading_params.py` for the named symbol.
 
 ### Scan schedule (`main.py`)
 
@@ -143,7 +154,7 @@ scan_times = [
 ]
 ```
 
-Each entry creates an APScheduler cron job in Eastern Time. The EOD close reminder is hardcoded at 15:50 ET.
+Each entry creates an APScheduler cron job in Eastern Time.
 
 ### Watchlist
 

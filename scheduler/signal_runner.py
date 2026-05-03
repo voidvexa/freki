@@ -4,10 +4,14 @@ import pytz
 
 from config.settings import settings
 from config.symbols import ETF_SYMBOLS
-from config.trading_params import ATR_STOP_MULT, MIN_RISK_REWARD, MIN_CONFIDENCE
+from config.per_symbol_params import get_params
 from indicators.composite import get_full_snapshot
-from signals.formatter import format_snapshot_summary
+from signals.formatter import format_snapshot_summary, format_macro_summary
 from agent.claude_client import evaluate_with_claude
+from filters.registry import run_symbol_filters
+from journal.store import record_signal
+from macro.fred_client import get_macro_snapshot
+from macro.live_client import get_live_snapshot
 from notifications.telegram import send_signal
 from monitoring.logger import log
 
@@ -20,41 +24,57 @@ def run_signal_scan():
     log.info(f"  Signal Scan | {len(ETF_SYMBOLS)} ETFs | {now.strftime('%Y-%m-%d %H:%M ET')}")
     log.info(f"{'='*50}")
 
+    macro = get_macro_snapshot()
+    live = get_live_snapshot()
+    macro_summary = format_macro_summary(macro, live)
+    if macro:
+        log.info(f"  Macro context loaded: {len(macro)} FRED indicators")
+    else:
+        log.info("  Macro context: unavailable (proceeding without)")
+    if live:
+        log.info(f"  Live market: VIX={live.get('vix')} SKEW={live.get('skew')}")
+    else:
+        log.info("  Live market data: unavailable (proceeding without)")
+
     for sym in ETF_SYMBOLS:
         snap = get_full_snapshot(sym)
         if not snap.get("current_price"):
             log.warning(f"  {sym}: no data, skipping")
             continue
 
+        tech_ok, tech_reason = run_symbol_filters(snap)
+        if not tech_ok:
+            log.info(f"  {sym:6s} | FILTERED | {tech_reason}")
+            continue
+
+        params = get_params(sym)
         price = snap["current_price"]
         bar_time = snap.get("last_bar_time", "N/A")
         atr = snap.get("4h", {}).get("atr", 0)
-        stop_dist = atr * ATR_STOP_MULT if atr else price * 0.01
+        stop_dist = atr * params["atr_stop_mult"] if atr else price * 0.01
 
         summary = format_snapshot_summary(snap)
-        direction, confidence, reasoning = evaluate_with_claude(sym, summary)
+        try:
+            direction, reasoning = evaluate_with_claude(sym, summary, macro_summary)
+        except Exception as e:
+            log.error(f"  {sym:6s} | ERROR   | Claude evaluation failed: {e}")
+            continue
 
-        if direction == "long" and confidence >= MIN_CONFIDENCE:
-            stop = round(price - stop_dist, 2)
-            target = round(price + stop_dist * MIN_RISK_REWARD, 2)
+        if direction in ("long", "short"):
+            if direction == "long":
+                stop = round(price - stop_dist, 2)
+                target = round(price + stop_dist * params["min_risk_reward"], 2)
+            else:
+                stop = round(price + stop_dist, 2)
+                target = round(price - stop_dist * params["min_risk_reward"], 2)
+
             log.info(
-                f"  {sym:6s} | LONG  | ${price:.2f} ({bar_time}) | SL ${stop:.2f} | TP ${target:.2f} | "
-                f"confidence={confidence}%"
+                f"  {sym:6s} | {direction.upper():5s} | ${price:.2f} ({bar_time}) | SL ${stop:.2f} | TP ${target:.2f}"
             )
-            send_signal(sym, direction, price, bar_time, stop, target, confidence, reasoning)
+            send_signal(sym, direction, price, bar_time, stop, target, reasoning)
+            record_signal(sym, direction, price, bar_time, stop, target, reasoning, snap, {**(macro or {}), **(live or {})})
 
-        elif direction == "short" and confidence >= MIN_CONFIDENCE:
-            stop = round(price + stop_dist, 2)
-            target = round(price - stop_dist * MIN_RISK_REWARD, 2)
-            log.info(
-                f"  {sym:6s} | SHORT | ${price:.2f} ({bar_time}) | SL ${stop:.2f} | TP ${target:.2f} | "
-                f"confidence={confidence}%"
-            )
-            send_signal(sym, direction, price, bar_time, stop, target, confidence, reasoning)
-
-        elif direction == "error":
-            log.error(f"  {sym:6s} | ERROR   | Claude failed to evaluate — check logs above")
         else:
-            log.info(f"  {sym:6s} | NEUTRAL | ${price:.2f} ({bar_time}) | confidence={confidence}%")
+            log.info(f"  {sym:6s} | NEUTRAL | ${price:.2f} ({bar_time})")
 
     log.info(f"{'='*50}")

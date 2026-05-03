@@ -5,6 +5,7 @@ alpaca-py>=0.38.0
 pandas>=2.2.0
 pandas-ta>=0.3.14b0
 numpy>=1.26.0
+yfinance>=0.2.40
 
 # AI Reasoning
 anthropic>=0.40.0

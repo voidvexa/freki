@@ -1,3 +1,42 @@
+_MACRO_LABELS = (
+    ("fed_funds_rate", "Fed Funds Rate (effective)", "%"),
+    ("fed_funds_target_upper", "Fed Funds Target (upper)", "%"),
+    ("fed_funds_target_lower", "Fed Funds Target (lower)", "%"),
+    ("ten_year_yield", "10Y Treasury Yield", "%"),
+    ("real_10y", "Real 10Y Yield (TIPS)", "%"),
+    ("yield_curve", "2Y-10Y Spread", "%"),
+    ("cpi_yoy", "CPI YoY", "%"),
+    ("core_cpi_yoy", "Core CPI YoY", "%"),
+    ("unemployment_rate", "Unemployment", "%"),
+    ("hy_spread", "HY Credit Spread", "bps"),
+)
+
+_LIVE_LABELS = (
+    ("vix", "VIX", ""),
+    ("skew", "SKEW", ""),
+)
+
+
+def format_macro_summary(macro: dict | None, live: dict | None = None) -> str:
+    sections = []
+
+    if macro:
+        lines = ["Macro (FRED, daily):"]
+        for key, label, suffix in _MACRO_LABELS:
+            v = macro.get(key)
+            lines.append(f"  {label}: {v:.2f}{suffix}" if v is not None else f"  {label}: N/A")
+        sections.append("\n".join(lines))
+
+    if live:
+        lines = ["Market (live):"]
+        for key, label, suffix in _LIVE_LABELS:
+            v = live.get(key)
+            lines.append(f"  {label}: {v:.2f}{suffix}" if v is not None else f"  {label}: N/A")
+        sections.append("\n".join(lines))
+
+    return "\n\n".join(sections)
+
+
 def format_snapshot_summary(snapshot: dict) -> str:
     lines = []
     price = snapshot.get("current_price")

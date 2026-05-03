@@ -23,19 +23,14 @@ def send_message(text: str) -> None:
         log.error(f"Telegram error: {e}")
 
 
-def send_signal(symbol: str, direction: str, price: float, bar_time: str, stop: float, target: float, confidence: int, reasoning: str) -> None:
+def send_signal(symbol: str, direction: str, price: float, bar_time: str, stop: float, target: float, reasoning: str) -> None:
     direction_upper = direction.upper()
     message = (
         f"*{direction_upper}* {symbol}\n\n"
         f"*Entry:* ${price:.2f} _(as of {bar_time})_\n"
         f"*Stop Loss:* ${stop:.2f}\n"
-        f"*Take Profit:* ${target:.2f}\n"
-        f"*Confidence:* {confidence}%\n\n"
+        f"*Take Profit:* ${target:.2f}\n\n"
         f"*Reasoning:*\n{reasoning}\n\n"
         f"_Price may have moved — verify before entering._"
     )
     send_message(message)
-
-
-def send_eod_close_reminder() -> None:
-    send_message("Close all open positions — market closing soon.")

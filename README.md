@@ -12,9 +12,8 @@ ETF signal scanner that runs on a schedule during US market hours. It fetches pr
 | Trend bias | Daily candles (100 bars) |
 | Stop loss | ATR(4h) x 1.5 |
 | Take profit | Stop distance x 2.5 (R:R = 1:2.5) |
-| Min confidence | 60% |
 | Scan | Daily at 12:20 ET |
-| EOD alert | 15:50 ET |
+| Weekly digest | Friday 16:30 ET |
 
 ## Pipeline
 
@@ -44,7 +43,17 @@ ATR is computed on the entry timeframe for stop loss and take profit calculation
 
 > These indicators work for both long and short signals. For example, "MACD bullish = false" means bearish momentum; "Price above EMA21 = false" means a downtrend; "OBV rising = false" means money flowing out. Claude interprets the full picture in both directions.
 
-### 3. Build Summary
+### 3. Technical Pre-Filter
+
+Before sending data to Claude, each symbol must pass a hard technical gate:
+
+- Both 4h and 1d price above EMA21 (for long candidates; inverse for short)
+- MACD trend direction aligned on both timeframes
+- RSI within the configured zone (default: 40–70 for longs, 30–60 for shorts)
+
+Symbols that don't pass are logged and skipped. This reduces Claude API calls and avoids evaluating noise.
+
+### 4. Build Summary
 
 The indicators are formatted into a readable text block:
 
@@ -54,21 +63,22 @@ Price: $550.00
 1D: MACD bullish (expanding) | above EMA21 | RSI 62.1 | ATR $5.75 | Vol 0.9x | OBV rising
 ```
 
-### 4. Claude Evaluation
+### 5. Claude Evaluation
 
-The summary is sent to Claude with a system prompt instructing it to act as a conservative swing signal analyst. Claude reads the indicators, reasons through them, and responds with:
+The summary is sent to Claude with a system prompt instructing it to act as a conservative swing signal analyst.
+
+In addition to the indicator summary, Claude also receives a macro context block with live FRED economic data (Fed Funds rate, CPI YoY, HY credit spread, yield curve spread, unemployment) and real-time market indicators (VIX, SKEW). This lets Claude factor macro regime into its decision (risk-on vs risk-off, credit stress, fear gauge). FRED data is optional — if `FRED_API_KEY` is not set in `.env`, the macro block is omitted and Claude evaluates on technicals alone.
+
+Claude reads the indicators, reasons through them, and responds with:
 
 ```json
 {
   "direction": "long",
-  "confidence": 72,
   "reasoning": "Both timeframes aligned bullish..."
 }
 ```
 
-### 5. Confidence Filter
-
-If `confidence >= 60%`, the signal proceeds. Otherwise it's logged as neutral and skipped.
+If `direction` is `neutral`, the signal is logged and skipped. Only `long` or `short` signals proceed.
 
 ### 6. Calculate Stop Loss and Take Profit
 
@@ -90,7 +100,6 @@ LONG SPY
 Entry: $550.00 (as of 2026-04-09 12:00 ET)
 Stop Loss: $548.42
 Take Profit: $553.94
-Confidence: 72%
 
 Reasoning:
 Both timeframes aligned bullish. 4h MACD expanding with price
@@ -102,9 +111,12 @@ average volume.
 
 Steps 1-7 repeat for each symbol in the watchlist. After all symbols are scanned, the app sleeps until the next scheduled scan.
 
-## End of Day
+## End of Week
 
-At **15:50 ET** (10 minutes before market close), the app sends a reminder to close all open positions.
+At **16:30 ET on Fridays**, the app sends a weekly summary to Telegram with:
+- Total signals emitted that week
+- Long vs. short breakdown
+- Signal count per symbol
 
 ## Setup
 
@@ -114,6 +126,7 @@ At **15:50 ET** (10 minutes before market close), the app sends a reminder to cl
 - [Alpaca](https://alpaca.markets/) account (market data API)
 - [Anthropic](https://console.anthropic.com/) API key
 - [Telegram bot](https://core.telegram.org/bots#creating-a-new-bot) + chat ID
+- [FRED](https://fred.stlouisfed.org/docs/api/api_key.html) API key (optional — macro context for Claude)
 
 ### Installation
 
@@ -142,20 +155,30 @@ freki/
   config/
     settings.py              # Environment config (pydantic-settings)
     symbols.py               # ETF watchlist
-    trading_params.py        # ATR multiplier, R:R, confidence threshold
+    trading_params.py        # Global ATR multiplier and R:R
+    per_symbol_params.py     # Per-symbol parameter overrides
   data/
     alpaca_client.py         # Alpaca API client
     market_data.py           # OHLCV data fetching
   indicators/
     composite.py             # Technical indicator computation
+  filters/
+    registry.py              # Filter orchestration
+    technical_filter.py      # EMA/MACD/RSI eligibility checks
   signals/
     formatter.py             # Indicator summary formatting
   agent/
     claude_client.py         # Claude API integration + prompt
+  macro/
+    fred_client.py           # FRED economic indicators
+    live_client.py           # VIX, SKEW (yfinance)
   scheduler/
     signal_runner.py         # Main scan loop
   notifications/
     telegram.py              # Telegram delivery
+    weekly_digest.py         # Friday weekly summary
+  journal/
+    store.py                 # SQLite signal journal
   monitoring/
     logger.py                # Loguru configuration
   docs/
