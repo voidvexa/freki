@@ -31,7 +31,7 @@ SIGNAL_SYSTEM_PROMPT = (
     "across both timeframes and the macro regime is supportive. Most setups should be NEUTRAL. "
     "Respond in JSON with two fields: "
     "\"direction\": \"long\", \"short\", or \"neutral\", "
-    "\"reasoning\": string (100 words max, only if direction is long or short, else empty string)."
+    "\"reasoning\": string (100 words max, always required regardless of direction)."
 )
 
 

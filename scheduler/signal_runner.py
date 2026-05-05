@@ -9,7 +9,7 @@ from indicators.composite import get_full_snapshot
 from signals.formatter import format_snapshot_summary, format_macro_summary
 from agent.claude_client import evaluate_with_claude
 from filters.registry import run_symbol_filters
-from journal.store import record_signal
+from journal.store import build_signal_payload, record_filtered, record_neutral, record_signal
 from macro.fred_client import get_macro_snapshot
 from macro.live_client import get_live_snapshot
 from notifications.telegram import send_signal
@@ -45,6 +45,7 @@ def run_signal_scan():
         tech_ok, tech_reason = run_symbol_filters(snap)
         if not tech_ok:
             log.info(f"  {sym:6s} | FILTERED | {tech_reason}")
+            record_filtered(sym, tech_reason, snap, {**(macro or {}), **(live or {})})
             continue
 
         params = get_params(sym)
@@ -71,10 +72,19 @@ def run_signal_scan():
             log.info(
                 f"  {sym:6s} | {direction.upper():5s} | ${price:.2f} ({bar_time}) | SL ${stop:.2f} | TP ${target:.2f}"
             )
-            send_signal(sym, direction, price, bar_time, stop, target, reasoning)
-            record_signal(sym, direction, price, bar_time, stop, target, reasoning, snap, {**(macro or {}), **(live or {})})
-
         else:
+            stop = None
+            target = None
             log.info(f"  {sym:6s} | NEUTRAL | ${price:.2f} ({bar_time})")
+
+        payload = build_signal_payload(
+            sym, direction, price, bar_time, stop, target, reasoning,
+            snap, {**(macro or {}), **(live or {})},
+        )
+        send_signal(payload)
+        if direction in ("long", "short"):
+            record_signal(payload)
+        else:
+            record_neutral(payload)
 
     log.info(f"{'='*50}")
