@@ -51,7 +51,7 @@ Before sending data to Claude, each symbol must pass a hard technical gate:
 - MACD trend direction aligned on both timeframes
 - RSI within the configured zone (default: 40–70 for longs, 30–60 for shorts)
 
-Symbols that don't pass are logged and skipped. This reduces Claude API calls and avoids evaluating noise.
+Symbols that don't pass are logged, stored to the `filtered_signals` table for audit, and skipped. This reduces Claude API calls and avoids evaluating noise. No Telegram message is sent for filtered symbols.
 
 ### 4. Build Summary
 
@@ -78,9 +78,11 @@ Claude reads the indicators, reasons through them, and responds with:
 }
 ```
 
-If `direction` is `neutral`, the signal is logged and skipped. Only `long` or `short` signals proceed.
+`direction` is one of `long`, `short`, or `neutral`. Reasoning is always required so audit queries can show *why* Claude chose neutral, not just that it did.
 
 ### 6. Calculate Stop Loss and Take Profit
+
+Only for `long` or `short` decisions. Neutral signals carry no SL/TP.
 
 Using the entry timeframe ATR (e.g. $1.05):
 
@@ -94,22 +96,62 @@ Stop distance = ATR x 1.5 = $1.05 x 1.5 = $1.58. Take profit = stop distance x 2
 
 ### 7. Telegram Notification
 
+A Telegram message is sent for any symbol that passes the technical pre-filter — `long`, `short`, *and* `neutral`. The header summarizes the decision and the body contains the full signal payload as JSON, so every indicator value, the macro context, and Claude's reasoning are preserved in the chat history.
+
+**Long / short:**
+
 ```
-LONG SPY
+*LONG SPY* AT $550.00 | SL $548.42 | TP $553.94
 
-Entry: $550.00 (as of 2026-04-09 12:00 ET)
-Stop Loss: $548.42
-Take Profit: $553.94
-
-Reasoning:
-Both timeframes aligned bullish. 4h MACD expanding with price
-above EMA21. Volume confirms the move with OBV rising and 1.4x
-average volume.
+```json
+{
+  "emitted_at": "2026-05-05T16:21:03.441+00:00",
+  "symbol": "SPY",
+  "direction": "long",
+  "entry_price": 550.00,
+  "bar_time": "2026-05-05 12:00 ET",
+  "stop": 548.42,
+  "target": 553.94,
+  "reasoning": "Both timeframes aligned bullish...",
+  "model": "claude-sonnet-4-6",
+  "atr": 1.05,
+  "rsi_4h": 58.2,
+  "rsi_1d": 62.1,
+  "macd_4h_bullish": true,
+  "ema_4h_above": true,
+  "ema_1d_above": true,
+  "vol_ratio_4h": 1.4,
+  "obv_4h_rising": true,
+  "macro": { "vix": 18.3, "skew": 128.0, ... }
+}
+```
 ```
 
-### 8. Repeat
+**Neutral:**
 
-Steps 1-7 repeat for each symbol in the watchlist. After all symbols are scanned, the app sleeps until the next scheduled scan.
+```
+*NEUTRAL SPY* AT $550.00
+
+```json
+{ ...same shape, with "stop": null, "target": null... }
+```
+```
+
+### 8. Storage / Audit Trail
+
+Every symbol that has market data is recorded to one of three SQLite tables in `journal/signals.sqlite`. This is the audit trail for evaluating the filtering and signaling strategy after the fact.
+
+| Table | When it's written | Telegram? | Stop / Target |
+|---|---|---|---|
+| `filtered_signals` | Symbol failed the technical pre-filter (Claude was never called) | No | N/A |
+| `neutral_signals` | Passed filter, Claude returned `neutral` | Yes | N/A |
+| `signals` | Passed filter, Claude returned `long` or `short` | Yes | Yes |
+
+All three tables capture the full indicator snapshot (4h + 1d) and the macro context block as JSON. `filtered_signals` adds a `filter_reason` column; `neutral_signals` and `signals` both store Claude's reasoning and the model name. This means the data behind every decision — including the rejections — is queryable.
+
+### 9. Repeat
+
+Steps 1-8 repeat for each symbol in the watchlist. After all symbols are scanned, the app sleeps until the next scheduled scan.
 
 ## End of Week
 
