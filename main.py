@@ -15,7 +15,7 @@ if __name__ == "__main__":
     for hour, minute in scan_times:
         scheduler.add_job(
             run_signal_scan,
-            CronTrigger(hour=hour, minute=minute, timezone="America/New_York"),
+            CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone="America/New_York"),
         )
     scheduler.add_job(
         send_weekly_digest,
