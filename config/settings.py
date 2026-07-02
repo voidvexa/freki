@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     alpaca_secret_key: str
 
     anthropic_api_key: str
-    anthropic_model: str = "claude-sonnet-4-6"
+    anthropic_model: str = "claude-opus-4-8"
     anthropic_temperature: float = 0.2
 
     fred_api_key: str = ""
